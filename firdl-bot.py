@@ -13,7 +13,7 @@ import re
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 MONGO_URI = os.getenv('MONGO_URI')
-MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'fir_bot')
+MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'fir')
 
 FIR_API_URL = 'https://app.ppsaanjh.in:7071/Citizen_apis/SaanjhWS/AppService/DownloadFIR_cctns'
 BULK_DELAY = 1.5  # Delay in seconds between processing bulk requests
