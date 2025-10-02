@@ -52,7 +52,6 @@ async def get_cached_message_id(collection, fir_key):
     return document['message_id'] if document else None
 
 async def cache_message_id(collection, fir_key, message_id):
-    # Using replace_one with upsert is an efficient way to insert or update.
     await collection.replace_one(
         {"_id": fir_key},
         {"_id": fir_key, "message_id": message_id},
@@ -63,7 +62,6 @@ async def cache_message_id(collection, fir_key, message_id):
 # --- TELEGRAM COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     separator = r"\-\-\-\-\-\-\-\-\-\-\-\-"
-    # Use .format() to avoid f-string parsing errors with markdown escapes
     message_template = """
 *🇮🇳 Fazilka FIR Downloader*
 _{'Your instant portal to PPSAANJH documents\.'}_
@@ -84,8 +82,11 @@ Just send a message like this:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     separator = r"\-\-\-\-\-\-\-\-\-\-\-\-"
-    ps_list = "\n".join([f"`{code}` \\- _{data['psName'].replace('-', r'\\-')}_" for code, data in psMap.items()])
-    # Use .format() to avoid f-string parsing errors with markdown escapes
+    # FIX: Use .format() inside the list comprehension to avoid the backslash-in-f-string error
+    ps_list = "\n".join([
+        "`{}` \\- _{}_".format(code, data['psName'].replace('-', r'\\-'))
+        for code, data in psMap.items()
+    ])
     message_template = """
 *📖 BOT GUIDE \| FAZILKA DISTRICT*
 This bot uses a permanent cache for instant delivery of previously downloaded files\.
@@ -108,11 +109,9 @@ aw 45/2024
 
 # --- CORE LOGIC ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles incoming text messages for single or bulk FIR requests."""
     lines = [line.strip() for line in update.message.text.strip().split('\n') if line.strip()]
     if not lines:
         return
-
     if len(lines) > 1:
         await handle_bulk_request(update, context, lines)
     else:
@@ -150,7 +149,6 @@ async def process_fir_request(chat_id: int, text: str, context: ContextTypes.DEF
     ps_short_code, fir_number, fir_year = match.groups()
     ps_data = psMap.get(ps_short_code)
 
-    # --- Validation ---
     if not ps_data or not (1 <= int(fir_number) <= 999) or not (2010 <= int(fir_year) <= 2026):
         await context.bot.send_message(chat_id, f"❌ *Invalid Input:* `{text}`", parse_mode=ParseMode.MARKDOWN_V2)
         return
@@ -163,7 +161,6 @@ async def process_fir_request(chat_id: int, text: str, context: ContextTypes.DEF
         await context.bot.copy_message(chat_id, from_chat_id=LOG_CHANNEL_ID, message_id=cached_id)
         return
     
-    # --- API Fetching ---
     logger.info(f"Cache miss for {fir_key}. Fetching from API.")
     spoof_ip, ip_version = generate_spoofed_ip()
     pdf_content, status_code = await fetch_fir_from_api(ps_data, fir_number, fir_year, spoof_ip)
@@ -173,7 +170,6 @@ async def process_fir_request(chat_id: int, text: str, context: ContextTypes.DEF
         user_caption = generate_success_caption(ps_data, fir_number, fir_year, spoof_ip, ip_version)
         await context.bot.send_document(chat_id, document=pdf_content, filename=file_name, caption=user_caption, parse_mode=ParseMode.MARKDOWN_V2)
         
-        # Log to channel and cache the new message ID
         log_caption = f"#{fir_key}\nPS: {ps_data['psName']}\nFIR: {fir_number}/{fir_year}"
         log_message = await context.bot.send_document(LOG_CHANNEL_ID, document=pdf_content, filename=file_name, caption=log_caption)
         
@@ -192,7 +188,6 @@ def generate_spoofed_ip():
     return ip, "IPv6"
 
 async def fetch_fir_from_api(ps_data, fir_number, fir_year, spoof_ip):
-    """Performs the network request to the external FIR API."""
     form_data = {'district': ps_data['districtCode'], 'ps': ps_data['psCode'], 'firNo': fir_number, 'firYear': fir_year}
     headers = {'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Python-Telegram-Bot/1.0', 'X-Forwarded-For': spoof_ip, 'X-Real-IP': spoof_ip}
     
@@ -225,21 +220,17 @@ def main():
         logger.critical("Missing critical environment variables! Please set TELEGRAM_BOT_TOKEN, LOG_CHANNEL_ID, and MONGO_URI.")
         return
 
-    # Initialize MongoDB client
     mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
     db = mongo_client[MONGO_DB_NAME]
     db_collection = db.fir_logs
 
-    # Create the bot application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.bot_data["db_collection"] = db_collection
 
-    # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Start polling
     logger.info("Bot is starting with polling...")
     application.run_polling()
 
